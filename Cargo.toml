@@ -1,0 +1,13 @@
+[package]
+name = "actix-context-redesign"
+version = "0.1.0"
+authors = ["Jonathas-Conceicao <jadoliveira@inf.ufpel.edu.br>"]
+edition = "2018"
+publish = false
+
+[dependencies]
+actix = "0.9"
+actix-rt = { git = "https://github.com/Jonathas-Conceicao/actix-net", branch = "topic/wait_spawned" }
+
+[dev-dependencies]
+tokio = { version = "0.2", default-features = false, features = [ "time" ] }
