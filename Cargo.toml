@@ -6,7 +6,7 @@ edition = "2018"
 publish = false
 
 [dependencies]
-actix = "0.9"
+actix = { git = "https://github.com/Jonathas-Conceicao/actix", branch = "topic/allow_external_context_impl" }
 actix-rt = { git = "https://github.com/Jonathas-Conceicao/actix-net", branch = "topic/wait_spawned" }
 
 [dev-dependencies]

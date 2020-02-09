@@ -9,14 +9,16 @@ use execution::ContextFut;
 use storage::FutureSet;
 
 use actix::dev::{
-    Actor, ActorContext, ActorFuture, ActorState, Addr, AsyncContext, Mailbox, SpawnHandle,
+    channel::AddressSenderProducer, Actor, ActorContext, ActorFuture, ActorState, Addr,
+    AsyncContext, Envelope, Handler, Mailbox, Message, SpawnHandle, SyncSender, ToEnvelope,
 };
 
 pub struct Context<A>
 where
     A: Actor<Context = Self>,
 {
-    mailbox: Mailbox<A>,
+    addr_producer: AddressSenderProducer<A>,
+    mailbox: Option<Mailbox<A>>,
     state: ActorState,
     wait: FutureSet<Box<dyn ActorFuture<Output = (), Actor = A>>>,
     spawn: FutureSet<Box<dyn ActorFuture<Output = (), Actor = A>>>,
@@ -30,11 +32,23 @@ where
         Self::default()
     }
 
-    fn run(self, act: A) -> Addr<A> {
+    fn run(mut self, act: A) -> Addr<A> {
         let addr = self.address();
-        let fut = ContextFut::new(self, act);
+        let mailbox = self.mailbox.take().unwrap();
+        let fut = ContextFut::new(self, act, mailbox);
         actix_rt::spawn(fut);
         addr
+    }
+}
+
+impl<A, M> ToEnvelope<A, M> for Context<A>
+where
+    A: Actor<Context = Context<A>> + Handler<M>,
+    M: Message + Send + 'static,
+    M::Result: Send,
+{
+    fn pack(msg: M, tx: Option<SyncSender<M::Result>>) -> Envelope<A> {
+        Envelope::new(msg, tx)
     }
 }
 
@@ -43,14 +57,17 @@ where
     A: Actor<Context = Self>,
 {
     fn default() -> Self {
+        let mb = Mailbox::default();
         Context {
-            mailbox: Mailbox::default(),
+            addr_producer: mb.sender_producer(),
+            mailbox: Some(mb),
             state: ActorState::Started,
             wait: FutureSet::default(),
             spawn: FutureSet::default(),
         }
     }
 }
+
 impl<A> ActorContext for Context<A>
 where
     A: Actor<Context = Self>,
@@ -75,7 +92,7 @@ where
     A: Actor<Context = Self>,
 {
     fn address(&self) -> Addr<A> {
-        self.mailbox.address()
+        Addr::new(self.addr_producer.sender())
     }
 
     fn spawn<F>(&mut self, fut: F) -> SpawnHandle
@@ -95,7 +112,7 @@ where
     }
 
     fn waiting(&self) -> bool {
-        self.wait.is_empty()
+        !self.wait.is_empty()
             || self.state == ActorState::Stopping
             || self.state == ActorState::Stopped
     }

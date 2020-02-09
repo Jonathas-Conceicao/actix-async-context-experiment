@@ -11,6 +11,7 @@ where
 {
     act: A,
     ctx: Context<A>,
+    mailbox: Mailbox<A>,
     wait: FutureSet<Box<dyn ActorFuture<Output = (), Actor = A>>>,
     spawn: FutureSet<Box<dyn ActorFuture<Output = (), Actor = A>>>,
 }
@@ -19,8 +20,8 @@ impl<A> ContextFut<A>
 where
     A: Actor<Context = Context<A>>,
 {
-    pub(super) fn new(ctx: Context<A>, act: A) -> Self {
-        ContextFut { act, ctx, wait: FutureSet::default(), spawn: FutureSet::default() }
+    pub(super) fn new(ctx: Context<A>, act: A, mailbox: Mailbox<A>) -> Self {
+        ContextFut { act, ctx, mailbox, wait: FutureSet::default(), spawn: FutureSet::default() }
     }
 
     fn merge(&mut self) {
@@ -55,6 +56,8 @@ where
                 }
             }
 
+            this.mailbox.poll(&mut this.act, &mut this.ctx, cx);
+            this.merge();
             if !this.wait.is_empty() && this.ctx.state == ActorState::Running {
                 continue;
             }
