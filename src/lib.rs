@@ -10,7 +10,8 @@ use storage::FutureSet;
 
 use actix::dev::{
     channel::AddressSenderProducer, Actor, ActorContext, ActorFuture, ActorState, Addr,
-    AsyncContext, Envelope, Handler, Mailbox, Message, SpawnHandle, SyncSender, ToEnvelope,
+    AsyncContext, Envelope, Handler, Mailbox, Message, Running, SpawnHandle, SyncSender,
+    ToEnvelope,
 };
 
 pub struct Context<A>

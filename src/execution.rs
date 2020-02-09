@@ -26,6 +26,14 @@ where
 
     fn merge(&mut self) {
         self.wait.append(&mut self.ctx.wait);
+        self.spawn.append(&mut self.ctx.spawn);
+    }
+
+    fn alive(&mut self) -> bool {
+        if self.ctx.state == ActorState::Stopped {
+            return false;
+        }
+        self.mailbox.connected() || !self.spawn.is_empty() || !self.wait.is_empty()
     }
 }
 
@@ -45,7 +53,7 @@ where
             this.merge();
         }
 
-        loop {
+        'outter: loop {
             while !this.wait.is_empty() && this.ctx.state == ActorState::Running {
                 if let Some(item) = this.wait.next_mut() {
                     match Pin::new(item).poll(&mut this.act, &mut this.ctx, cx) {
@@ -62,9 +70,41 @@ where
                 continue;
             }
 
-            break;
-        }
+            if this.ctx.state == ActorState::Running {
+                let mut idx = 0;
+                while idx < this.spawn.len() && this.ctx.state == ActorState::Running {
+                    match Pin::new(&mut this.spawn[idx]).poll(&mut this.act, &mut this.ctx, cx) {
+                        Poll::Pending => {}
+                        Poll::Ready(()) => {
+                            this.spawn.remove(idx);
+                        }
+                    }
+                    this.merge();
+                    if !this.wait.is_empty() && this.ctx.state == ActorState::Running {
+                        // Polled future has request a new wait;
+                        continue 'outter;
+                    }
+                    idx += 1;
+                }
+            }
 
-        Poll::Ready(())
+            let should_stop = match this.ctx.state {
+                ActorState::Stopping => {
+                    Actor::stopping(&mut this.act, &mut this.ctx) == Running::Stop
+                }
+                ActorState::Running => {
+                    !this.alive() && Actor::stopping(&mut this.act, &mut this.ctx) == Running::Stop
+                }
+                _ => false,
+            };
+
+            if should_stop {
+                this.ctx.state = ActorState::Stopped;
+                Actor::stopped(&mut this.act, &mut this.ctx);
+                return Poll::Ready(());
+            }
+
+            return Poll::Pending;
+        }
     }
 }

@@ -1,4 +1,7 @@
-use std::collections::VecDeque;
+use std::{
+    collections::VecDeque,
+    ops::{Deref, DerefMut},
+};
 
 pub(super) struct FutureSet<V> {
     set: VecDeque<V>,
@@ -16,14 +19,6 @@ impl<V> FutureSet<V> {
         0
     }
 
-    pub(super) fn is_empty(&self) -> bool {
-        self.set.is_empty()
-    }
-
-    pub(super) fn len(&self) -> usize {
-        self.set.len()
-    }
-
     pub(super) fn next(&self) -> Option<&V> {
         self.set.front()
     }
@@ -35,8 +30,18 @@ impl<V> FutureSet<V> {
     pub(super) fn pop(&mut self) -> Option<V> {
         self.set.pop_front()
     }
+}
 
-    pub(super) fn append(&mut self, other: &mut Self) {
-        self.set.append(&mut other.set)
+impl<T> Deref for FutureSet<T> {
+    type Target = VecDeque<T>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.set
+    }
+}
+
+impl<T> DerefMut for FutureSet<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.set
     }
 }

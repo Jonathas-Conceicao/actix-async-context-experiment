@@ -21,7 +21,7 @@ mod context_wait {
         let act = BasicActor;
         let instant = Instant::now();
 
-        Context::new().run(act);
+        let _ = Context::new().run(act);
         actix_rt::Arbiter::local_join().await;
 
         assert!(instant.elapsed() >= Duration::from_secs(2));
@@ -39,22 +39,51 @@ mod message_handling {
 
     #[derive(Message)]
     #[rtype(result = "()")]
-    struct Sleep(Duration);
+    struct WaitSleep(Duration);
 
-    impl Handler<Sleep> for BasicActor {
+    impl Handler<WaitSleep> for BasicActor {
         type Result = ();
-        fn handle(&mut self, msg: Sleep, ctx: &mut Context<Self>) {
-            ctx.wait(delay_for(msg.0).into_actor(self))
+        fn handle(&mut self, msg: WaitSleep, ctx: &mut Context<Self>) {
+            ctx.wait(delay_for(msg.0).into_actor(self));
+        }
+    }
+
+    #[derive(Message)]
+    #[rtype(result = "()")]
+    struct SpawnSleep(Duration);
+
+    impl Handler<SpawnSleep> for BasicActor {
+        type Result = ();
+        fn handle(&mut self, msg: SpawnSleep, ctx: &mut Context<Self>) {
+            ctx.spawn(delay_for(msg.0).into_actor(self));
         }
     }
 
     #[actix_rt::test]
-    async fn send_message() {
+    async fn handle_with_ctx_wait() {
         let act = BasicActor;
         let instant = Instant::now();
 
-        let addr = Context::new().run(act);
-        addr.send(Sleep(Duration::from_secs(2))).await.unwrap();
+        {
+            // Scope used to eagerly drop address so actor can automatically stop
+            let addr = Context::new().run(act);
+            addr.send(WaitSleep(Duration::from_secs(2))).await.unwrap();
+        }
+        actix_rt::Arbiter::local_join().await;
+
+        assert!(instant.elapsed() >= Duration::from_secs(2));
+    }
+
+    #[actix_rt::test]
+    async fn handle_with_ctx_spawn() {
+        let act = BasicActor;
+        let instant = Instant::now();
+
+        {
+            // Scope used to eagerly drop address so actor can automatically stop
+            let addr = Context::new().run(act);
+            addr.send(SpawnSleep(Duration::from_secs(2))).await.unwrap();
+        }
         actix_rt::Arbiter::local_join().await;
 
         assert!(instant.elapsed() >= Duration::from_secs(2));
