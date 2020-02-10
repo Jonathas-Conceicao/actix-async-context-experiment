@@ -1,30 +1,83 @@
 use super::*;
 use actix::fut::WrapFuture;
-use std::time::{Duration, Instant};
+use std::{
+    sync::{Arc, Mutex},
+    time::{Duration, Instant},
+};
 use tokio::time::delay_for;
 
-mod context_wait {
+mod methods_override {
     use super::*;
 
-    struct BasicActor;
+    type Data = Arc<Mutex<usize>>;
 
-    impl Actor for BasicActor {
+    struct IncOnStart(Data);
+
+    impl Actor for IncOnStart {
         type Context = Context<Self>;
 
         fn started(&mut self, ctx: &mut Context<Self>) {
-            ctx.wait(delay_for(Duration::from_secs(2)).into_actor(self));
+            *self.0.lock().unwrap() += 313;
         }
     }
 
     #[actix_rt::test]
-    async fn empty_start() {
-        let act = BasicActor;
-        let instant = Instant::now();
+    async fn started() {
+        let data = Arc::new(Mutex::new(0));
+        let act = IncOnStart(data.clone());
 
-        let _ = Context::new().run(act);
+        Context::new().run(act);
         actix_rt::Arbiter::local_join().await;
 
-        assert!(instant.elapsed() >= Duration::from_secs(2));
+        assert_eq!(*data.lock().unwrap(), 313);
+    }
+
+    struct IncOnStop(Data);
+
+    impl Actor for IncOnStop {
+        type Context = Context<Self>;
+
+        fn stopped(&mut self, ctx: &mut Context<Self>) {
+            *self.0.lock().unwrap() += 313;
+        }
+    }
+
+    #[actix_rt::test]
+    async fn stopped() {
+        let data = Arc::new(Mutex::new(0));
+        let act = IncOnStop(data.clone());
+
+        Context::new().run(act);
+        actix_rt::Arbiter::local_join().await;
+
+        assert_eq!(*data.lock().unwrap(), 313);
+    }
+
+    struct Stubborn(Data);
+
+    impl Actor for Stubborn {
+        type Context = Context<Self>;
+
+        fn stopping(&mut self, ctx: &mut Context<Self>) -> Running {
+            let mut data = self.0.lock().unwrap();
+            if *data < 313 {
+                *data += 100;
+                return Running::Continue;
+            }
+
+            Running::Stop
+        }
+    }
+
+    #[actix_rt::test]
+    async fn stopping() {
+        let data = Arc::new(Mutex::new(0));
+        let act = Stubborn(data.clone());
+
+        Context::new().run(act);
+        actix_rt::Arbiter::local_join().await;
+
+        assert_eq!(*data.lock().unwrap(), 400);
     }
 }
 
