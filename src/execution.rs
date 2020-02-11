@@ -104,6 +104,7 @@ where
                 return Poll::Ready(());
             }
 
+            cx.waker().wake_by_ref();
             return Poll::Pending;
         }
     }
